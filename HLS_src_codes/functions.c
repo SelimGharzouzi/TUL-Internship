@@ -80,10 +80,15 @@ void lzw_compress(uint8_t *input, uint8_t *output, int input_size, uint32_t *com
     init_dictionary();
 
     uint16_t prefix = input[0];
+    uint8_t ext = input[1];
 
-    for (int i = 1; i < input_size; i++){ 
+    write_output(prefix, output, bit_count, &out_index);
+    Dictionary_add(prefix, ext, &dictionary_size, &bit_count);
+    prefix = ext;
+
+    for (int i = 2; i < input_size; i++){ 
         uint8_t ext = input[i];
-        uint16_t code = Dictionary_find( prefix, ext);
+        uint16_t code = Dictionary_find(prefix, ext);
         if (code != INVALID_CODE){
             prefix = code;
         } else {

@@ -11,7 +11,6 @@
 #include <xstatus.h>
 #include "ff.h"
 
-#define FREQ_CLOCK_HZ 100000000.0
 #define MAX_DICTIONARY_SIZE 4096
 #define INVALID_CODE 0xFFFF
 #define FILE_INPUT_SIZE 4*1024*1024

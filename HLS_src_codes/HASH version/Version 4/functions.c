@@ -17,34 +17,42 @@ void init_dictionary(void){
     }
 }
 
-uint32_t hash(uint16_t prefix, uint8_t ext) {
+void Dictionary_reset(uint16_t *dictionary_size, uint8_t *bit_count) {
+    (*dictionary_size) = 256;
+    (*bit_count) = 8;
+    init_dictionary();
+}
+
+uint32_t hash1(uint16_t prefix, uint8_t ext) {
     #pragma HLS INLINE
-    return ((prefix << 5) ^ ext) % MAX_DICTIONARY_SIZE;
+    return ((prefix << 8) ^ ext) & (MAX_DICTIONARY_SIZE - 1);
+}
+
+uint32_t hash2(uint16_t prefix, uint8_t ext) {
+    #pragma HLS INLINE
+    return (((prefix << 5) ^ (ext * 7)) & (MAX_DICTIONARY_SIZE - 1)) | 1;
 }
 
 uint16_t Dictionary_find(uint16_t prefix, uint8_t ext) {
-    #pragma HLS INLINE off
-    uint32_t h = hash(prefix, ext);
+    uint32_t h1 = hash1(prefix, ext);
+    uint32_t h2 = hash2(prefix, ext);
     for (uint32_t i = 0; i < MAX_DICTIONARY_SIZE; i++) {
-        #pragma HLS PIPELINE II=1
-        uint32_t idx = (h + i) % MAX_DICTIONARY_SIZE;
-
+        uint32_t idx = (h1 + i * h2) & (MAX_DICTIONARY_SIZE - 1);
         if (!dictionary_used[idx]) return INVALID_CODE;
-        if (dictionary[idx].prefix_code == prefix && dictionary[idx].ext_byte == ext) return dictionary[idx].code;
+        if (dictionary[idx].prefix_code == prefix && dictionary[idx].ext_byte == ext)
+            return dictionary[idx].code;
     }
-
     return INVALID_CODE;
 }
 
 void Dictionary_add(uint16_t prefix, uint8_t ext, uint16_t *dictionary_size, uint8_t *bit_count) {
-    #pragma HLS INLINE off
-    if (*dictionary_size >= MAX_DICTIONARY_SIZE) return;
+    if (*dictionary_size >= MAX_DICTIONARY_SIZE) Dictionary_reset(dictionary_size, bit_count);
     if (*dictionary_size >= (1u << *bit_count)) (*bit_count)++;
-    
-    uint32_t h = hash(prefix, ext);
+
+    uint32_t h1 = hash1(prefix, ext);
+    uint32_t h2 = hash2(prefix, ext);
     for (uint32_t i = 0; i < MAX_DICTIONARY_SIZE; i++) {
-        #pragma HLS PIPELINE II=1
-        uint32_t idx = (h + i) % MAX_DICTIONARY_SIZE;
+        uint32_t idx = (h1 + i * h2) & (MAX_DICTIONARY_SIZE - 1);
         if (!dictionary_used[idx]) {
             dictionary[idx].prefix_code = prefix;
             dictionary[idx].ext_byte = ext;
@@ -55,23 +63,6 @@ void Dictionary_add(uint16_t prefix, uint8_t ext, uint16_t *dictionary_size, uin
         }
     }
 }
-
-// void write_output(uint16_t code, uint8_t *output, uint8_t bit_count, uint32_t *out_index){
-//     #pragma HLS INLINE off
-//     for (int i = bit_count - 1; i >= 0; i--){
-//         #pragma HLS PIPELINE II=1
-//         bool bit = (code >> i) & 1;
-//         uint32_t byte_index = (*out_index)/8;
-//         uint8_t bit_pos = 7 - ((*out_index)%8);
-
-//         if (((*out_index) % 8) == 0) {
-//             output[byte_index] = 0;
-//         }
-
-//         output[byte_index] |= (bit << bit_pos);
-//         (*out_index)++;
-//     }
-// }
 
 void write_output(uint16_t code, uint8_t *output, uint8_t bit_count, uint32_t *out_index) {
     #pragma HLS INLINE off

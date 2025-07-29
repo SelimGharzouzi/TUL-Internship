@@ -6,25 +6,28 @@ int main(void)
 {   
     int size = 9;
     uint8_t input[] = "ABAABAAAB";
-    uint8_t output1[32] = {0};
-    uint8_t output2[32] = {0};
-    uint32_t compression_size1 = 0;
-    uint32_t compression_size2 = 0;
+    uint8_t outputs[NUMBERS_FUNCTIONS_PARALLEL][32] = {{0}};
+    uint32_t compression_sizes[NUMBERS_FUNCTIONS_PARALLEL] = {0};
 
-    top_parallel_lzw(input, size, output1, &compression_size1, output2, &compression_size2);
+    top_parallel_lzw(
+        input, size,
+        outputs[0], &compression_sizes[0],
+        outputs[1], &compression_sizes[1],
+        outputs[2], &compression_sizes[2]
+    );
 
-    printf("Compression_size[1] = %u\n", compression_size1);
-    printf("Compression_size[2] = %u\n\n", compression_size2);
-
-    printf("Output of first lzw_compress:\n");
-    for (uint32_t i = 0; i < compression_size1; i++) {
-        printf("output1[%u] = %u\n", i, output1[i]);
+    printf("\n");
+    for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; ++i) {
+        printf("Compression_size[%d] = %u\n", i + 1, compression_sizes[i]);
     }
+    printf("\n");
 
-    printf("----------------------------------------------------------------\n");
-    printf("Output of second lzw_compress:\n");
-    for (uint32_t i = 0; i < compression_size2; i++) {
-        printf("output2[%u] = %u\n", i, output2[i]);
+    for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; ++i) {
+        printf("Output of %dth lzw_compress:\n", i + 1);
+        for (uint32_t j = 0; j < compression_sizes[i]; ++j) {
+            printf("output%d[%u] = %u\n", i + 1, j, outputs[i][j]);
+        }
+        printf("----------------------------------------------------------------\n");
     }
 
     return 0;

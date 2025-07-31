@@ -18,6 +18,7 @@ void init_dictionary(void){
 }
 
 void Dictionary_reset(uint16_t *dictionary_size, uint8_t *bit_count) {
+    #pragma HLS INLINE off
     (*dictionary_size) = 256;
     (*bit_count) = 8;
     init_dictionary();
@@ -34,25 +35,31 @@ uint32_t hash2(uint16_t prefix, uint8_t ext) {
 }
 
 uint16_t Dictionary_find(uint16_t prefix, uint8_t ext) {
+    #pragma HLS INLINE off
     uint32_t h1 = hash1(prefix, ext);
     uint32_t h2 = hash2(prefix, ext);
     for (uint32_t i = 0; i < MAX_DICTIONARY_SIZE; i++) {
+        #pragma HLS PIPELINE II=1
         uint32_t idx = (h1 + i * h2) & (MAX_DICTIONARY_SIZE - 1);
+
         if (!dictionary_used[idx]) return INVALID_CODE;
-        if (dictionary[idx].prefix_code == prefix && dictionary[idx].ext_byte == ext)
-            return dictionary[idx].code;
+
+        if (dictionary[idx].prefix_code == prefix && dictionary[idx].ext_byte == ext) return dictionary[idx].code;
     }
     return INVALID_CODE;
 }
 
 void Dictionary_add(uint16_t prefix, uint8_t ext, uint16_t *dictionary_size, uint8_t *bit_count) {
+    #pragma HLS INLINE off
     if (*dictionary_size >= MAX_DICTIONARY_SIZE) Dictionary_reset(dictionary_size, bit_count);
     if (*dictionary_size >= (1u << *bit_count)) (*bit_count)++;
 
     uint32_t h1 = hash1(prefix, ext);
     uint32_t h2 = hash2(prefix, ext);
     for (uint32_t i = 0; i < MAX_DICTIONARY_SIZE; i++) {
+        #pragma HLS PIPELINE II=1
         uint32_t idx = (h1 + i * h2) & (MAX_DICTIONARY_SIZE - 1);
+
         if (!dictionary_used[idx]) {
             dictionary[idx].prefix_code = prefix;
             dictionary[idx].ext_byte = ext;
@@ -73,17 +80,19 @@ void write_output(uint16_t code, uint8_t *output, uint8_t bit_count, uint32_t *o
     uint32_t bits_left = bit_count;
     while (bits_left > 0) {
         #pragma HLS PIPELINE II=1
-        uint8_t bits_in_this_byte = 8 - bit_offset;
-        if (bits_in_this_byte > bits_left) bits_in_this_byte = bits_left;
-
-        uint8_t mask = (code >> (bits_left - bits_in_this_byte)) & ((1U << bits_in_this_byte) - 1);
+        uint8_t space_in_byte = 8 - bit_offset;
+        uint8_t bits_to_write = (bits_left < space_in_byte) ? bits_left : space_in_byte;
+        uint8_t mask = ((code >> (bits_left - bits_to_write)) & ((1U << bits_to_write) - 1));
 
         if (bit_offset == 0) output[byte_index] = 0;
-        
-        output[byte_index] |= mask << (8 - bit_offset - bits_in_this_byte);
-        bits_left -= bits_in_this_byte;
-        bit_offset = 0;
-        byte_index++;
+
+        output[byte_index] |= mask << (space_in_byte - bits_to_write);
+        bit_offset += bits_to_write;
+        if (bit_offset == 8) {
+            bit_offset = 0;
+            byte_index++;
+        }
+        bits_left -= bits_to_write;
     }
     *out_index += bit_count;
 }

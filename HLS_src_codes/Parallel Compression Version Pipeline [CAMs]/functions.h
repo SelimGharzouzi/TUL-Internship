@@ -68,10 +68,10 @@ void write_output(uint16_t code, uint8_t *output, uint8_t bit_count, uint32_t *o
  * @brief LZW compression function for HLS.
  *        Takes an input buffer and writes a compressed output buffer.
  *
- * @param input   Pointer to input data buffer.
- * @param output  Pointer to output buffer (bit-packed).
- * @param input_size    Input data size
- * @param compression_size Compression data
+ * @param input   		Pointer to input data buffer.
+ * @param output  		Pointer to output buffer (bit-packed).
+ * @param input_size    	Input data size
+ * @param compression_size	Compression data size
  */
 void lzw_compress(uint8_t *input, uint8_t *output, int input_size, uint32_t *compression_size);
 

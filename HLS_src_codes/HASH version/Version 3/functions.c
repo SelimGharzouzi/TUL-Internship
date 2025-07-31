@@ -65,17 +65,19 @@ void write_output(uint16_t code, uint8_t *output, uint8_t bit_count, uint32_t *o
     uint32_t bits_left = bit_count;
     while (bits_left > 0) {
         #pragma HLS PIPELINE II=1
-        uint8_t bits_in_this_byte = 8 - bit_offset;
-        if (bits_in_this_byte > bits_left) bits_in_this_byte = bits_left;
-
-        uint8_t mask = (code >> (bits_left - bits_in_this_byte)) & ((1U << bits_in_this_byte) - 1);
+        uint8_t space_in_byte = 8 - bit_offset;
+        uint8_t bits_to_write = (bits_left < space_in_byte) ? bits_left : space_in_byte;
+        uint8_t mask = ((code >> (bits_left - bits_to_write)) & ((1U << bits_to_write) - 1));
 
         if (bit_offset == 0) output[byte_index] = 0;
-        
-        output[byte_index] |= mask << (8 - bit_offset - bits_in_this_byte);
-        bits_left -= bits_in_this_byte;
-        bit_offset = 0;
-        byte_index++;
+
+        output[byte_index] |= mask << (space_in_byte - bits_to_write);
+        bit_offset += bits_to_write;
+        if (bit_offset == 8) {
+            bit_offset = 0;
+            byte_index++;
+        }
+        bits_left -= bits_to_write;
     }
     *out_index += bit_count;
 }

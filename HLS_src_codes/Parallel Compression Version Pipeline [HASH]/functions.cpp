@@ -1,14 +1,11 @@
 #include "functions.h"
-
-/**************************  Global Variables Declarations ******************************/
-static Dictionary dictionary[MAX_DICTIONARY_SIZE];
-static bool dictionary_used[MAX_DICTIONARY_SIZE];
+#include <cstdint>
 
 /**************************  Helper Functions Declarations ******************************/
-void init_dictionary(void){
+void init_dictionary(Dictionary *dictionary, bool *dictionary_used) {
     #pragma HLS INLINE off
-    memset(dictionary_used, 0, sizeof(dictionary_used));
-    for (uint16_t i = 0; i < 256; i++){
+    memset(dictionary_used, 0, sizeof(bool) * MAX_DICTIONARY_SIZE);
+    for (uint16_t i = 0; i < 256; i++) {
         #pragma HLS PIPELINE II=1
         dictionary[i].code = i;
         dictionary[i].prefix_code = INVALID_CODE;
@@ -17,10 +14,11 @@ void init_dictionary(void){
     }
 }
 
-void Dictionary_reset(uint16_t *dictionary_size, uint8_t *bit_count) {
-    (*dictionary_size) = 256;
-    (*bit_count) = 8;
-    init_dictionary();
+void Dictionary_reset(Dictionary *dictionary, bool *dictionary_used, uint16_t *dictionary_size, uint8_t *bit_count) {
+    #pragma HLS INLINE off
+    *dictionary_size = 256;
+    *bit_count = 8;
+    init_dictionary(dictionary, dictionary_used);
 }
 
 uint32_t hash1(uint16_t prefix, uint8_t ext) {
@@ -33,26 +31,37 @@ uint32_t hash2(uint16_t prefix, uint8_t ext) {
     return (((prefix << 5) ^ (ext * 7)) & (MAX_DICTIONARY_SIZE - 1)) | 1;
 }
 
-uint16_t Dictionary_find(uint16_t prefix, uint8_t ext) {
+uint16_t Dictionary_find(Dictionary *dictionary, bool *dictionary_used, uint16_t prefix, uint8_t ext) {
+    #pragma HLS INLINE off
     uint32_t h1 = hash1(prefix, ext);
     uint32_t h2 = hash2(prefix, ext);
+
     for (uint32_t i = 0; i < MAX_DICTIONARY_SIZE; i++) {
+        #pragma HLS PIPELINE II=1
         uint32_t idx = (h1 + i * h2) & (MAX_DICTIONARY_SIZE - 1);
+
         if (!dictionary_used[idx]) return INVALID_CODE;
-        if (dictionary[idx].prefix_code == prefix && dictionary[idx].ext_byte == ext)
-            return dictionary[idx].code;
+        if (dictionary[idx].prefix_code == prefix && dictionary[idx].ext_byte == ext) return dictionary[idx].code;
+
     }
     return INVALID_CODE;
 }
 
-void Dictionary_add(uint16_t prefix, uint8_t ext, uint16_t *dictionary_size, uint8_t *bit_count) {
-    if (*dictionary_size >= MAX_DICTIONARY_SIZE) Dictionary_reset(dictionary_size, bit_count);
+void Dictionary_add(
+    Dictionary *dictionary, bool *dictionary_used,
+    uint16_t prefix, uint8_t ext,
+    uint16_t *dictionary_size, uint8_t *bit_count
+) {
+    #pragma HLS INLINE off
+    if (*dictionary_size >= MAX_DICTIONARY_SIZE) Dictionary_reset(dictionary, dictionary_used, dictionary_size, bit_count);
     if (*dictionary_size >= (1u << *bit_count)) (*bit_count)++;
 
     uint32_t h1 = hash1(prefix, ext);
     uint32_t h2 = hash2(prefix, ext);
     for (uint32_t i = 0; i < MAX_DICTIONARY_SIZE; i++) {
+        #pragma HLS PIPELINE II=1
         uint32_t idx = (h1 + i * h2) & (MAX_DICTIONARY_SIZE - 1);
+        
         if (!dictionary_used[idx]) {
             dictionary[idx].prefix_code = prefix;
             dictionary[idx].ext_byte = ext;
@@ -73,27 +82,37 @@ void write_output(uint16_t code, uint8_t *output, uint8_t bit_count, uint32_t *o
     uint32_t bits_left = bit_count;
     while (bits_left > 0) {
         #pragma HLS PIPELINE II=1
-        uint8_t bits_in_this_byte = 8 - bit_offset;
-        if (bits_in_this_byte > bits_left) bits_in_this_byte = bits_left;
-
-        uint8_t mask = (code >> (bits_left - bits_in_this_byte)) & ((1U << bits_in_this_byte) - 1);
+        uint8_t space_in_byte = 8 - bit_offset;
+        uint8_t bits_to_write = (bits_left < space_in_byte) ? bits_left : space_in_byte;
+        uint8_t mask = ((code >> (bits_left - bits_to_write)) & ((1U << bits_to_write) - 1));
 
         if (bit_offset == 0) output[byte_index] = 0;
-        
-        output[byte_index] |= mask << (8 - bit_offset - bits_in_this_byte);
-        bits_left -= bits_in_this_byte;
-        bit_offset = 0;
-        byte_index++;
+
+        output[byte_index] |= mask << (space_in_byte - bits_to_write);
+        bit_offset += bits_to_write;
+        if (bit_offset == 8) {
+            bit_offset = 0;
+            byte_index++;
+        }
+        bits_left -= bits_to_write;
     }
     *out_index += bit_count;
 }
 
 /**************************  Main Compression Function Declaration ******************************/
-void lzw_compress(uint8_t *input, uint8_t *output, int input_size, uint32_t *compression_size){
+void lzw_compress(uint8_t *input, uint8_t *output, int input_size, uint32_t *compression_size) {
     #pragma HLS INLINE off
+    Dictionary dictionary[MAX_DICTIONARY_SIZE];
+    bool dictionary_used[MAX_DICTIONARY_SIZE];
+
     uint16_t dictionary_size = 256;
     uint8_t bit_count = 8;
     uint32_t out_index = 0;
+
+    if (input_size == 0) {
+        *compression_size = 0;
+        return;
+    }
     
     if (input_size == 1) {
         write_output(input[0], output, bit_count, &out_index);
@@ -101,23 +120,23 @@ void lzw_compress(uint8_t *input, uint8_t *output, int input_size, uint32_t *com
         return;
     }
 
-    init_dictionary();
+    init_dictionary(dictionary, dictionary_used);
 
     uint16_t prefix = input[0];
     uint8_t ext = input[1];
 
     write_output(prefix, output, bit_count, &out_index);
-    Dictionary_add(prefix, ext, &dictionary_size, &bit_count);
+    Dictionary_add(dictionary, dictionary_used, prefix, ext, &dictionary_size, &bit_count);
     prefix = ext;
 
     for (int i = 2; i < input_size; i++){ 
         uint8_t ext = input[i];
-        uint16_t code = Dictionary_find(prefix, ext);
+        uint16_t code = Dictionary_find(dictionary, dictionary_used, prefix, ext);
         if (code != INVALID_CODE){
             prefix = code;
         } else {
             write_output(prefix, output, bit_count, &out_index);
-            Dictionary_add(prefix, ext, &dictionary_size, &bit_count);
+            Dictionary_add(dictionary, dictionary_used, prefix, ext, &dictionary_size, &bit_count);
             prefix = ext;
         }
     }
@@ -133,41 +152,30 @@ void lzw_compress(uint8_t *input, uint8_t *output, int input_size, uint32_t *com
 
 /**************************  Main Parallel Compression Function Declaration ******************************/
 void top_parallel_lzw(
-    uint8_t* input, int input_size,
+    uint8_t* input1, int input_size1,
+    uint8_t* input2, int input_size2,
     uint8_t* output1, uint32_t* compression_size1,
-    uint8_t* output2, uint32_t* compression_size2,
-    uint8_t* output3, uint32_t* compression_size3
-    ) {
-    #pragma HLS INTERFACE m_axi depth=input_size port=input offset=slave bundle=AXIM_A
-    #pragma HLS INTERFACE m_axi depth=input_size port=output1 offset=slave bundle=AXIM_A
-    #pragma HLS INTERFACE m_axi depth=input_size port=output2 offset=slave bundle=AXIM_A
-    #pragma HLS INTERFACE m_axi depth=input_size port=output3 offset=slave bundle=AXIM_A
+    uint8_t* output2, uint32_t* compression_size2
+) {
+    #pragma HLS INTERFACE m_axi depth=input_size1 port=input1 offset=slave bundle=AXIM_IN1
+    #pragma HLS INTERFACE m_axi depth=input_size2 port=input2 offset=slave bundle=AXIM_IN2
+    #pragma HLS INTERFACE m_axi depth=input_size1 port=output1 offset=slave bundle=AXIM_OUT1
+    #pragma HLS INTERFACE m_axi depth=input_size2 port=output2 offset=slave bundle=AXIM_OUT2
 
-    #pragma HLS INTERFACE s_axilite port=input   bundle=control
+    #pragma HLS INTERFACE s_axilite port=input1   bundle=control
+    #pragma HLS INTERFACE s_axilite port=input2   bundle=control
     #pragma HLS INTERFACE s_axilite port=output1  bundle=control
     #pragma HLS INTERFACE s_axilite port=output2 bundle=control
-    #pragma HLS INTERFACE s_axilite port=output3 bundle=control
 
     #pragma HLS INTERFACE s_axilite port=return  bundle=control
 
-    #pragma HLS INTERFACE s_axilite port=input_size    bundle=control
+    #pragma HLS INTERFACE s_axilite port=input_size1    bundle=control
+    #pragma HLS INTERFACE s_axilite port=input_size2    bundle=control
     #pragma HLS INTERFACE s_axilite port=compression_size1 bundle=control
     #pragma HLS INTERFACE s_axilite port=compression_size2 bundle=control
-    #pragma HLS INTERFACE s_axilite port=compression_size3 bundle=control
 
-    int part_size = input_size / NUMBERS_FUNCTIONS_PARALLEL;
-    int remainder = input_size % NUMBERS_FUNCTIONS_PARALLEL;
-    int sizes[NUMBERS_FUNCTIONS_PARALLEL];
-    int offsets[NUMBERS_FUNCTIONS_PARALLEL];
 
-    for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; i++) {
-        sizes[i] = part_size + (i < remainder ? 1 : 0);
-        offsets[i] = (i == 0) ? 0 : offsets[i-1] + sizes[i-1];
-    }
-    
     #pragma HLS DATAFLOW
-
-    lzw_compress(input + offsets[0], output1, sizes[0], compression_size1);
-    lzw_compress(input + offsets[1], output2, sizes[1], compression_size2);
-    lzw_compress(input + offsets[2], output3, sizes[2], compression_size3);
+    lzw_compress(input1, output1, input_size1, compression_size1);
+    lzw_compress(input2, output2, input_size2, compression_size2);
 }

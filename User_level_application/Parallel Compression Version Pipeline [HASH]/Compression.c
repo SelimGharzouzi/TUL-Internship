@@ -12,7 +12,7 @@
 #include <xstatus.h>
 #include "ff.h"
 
-#define NUMBERS_FUNCTIONS_PARALLEL 3
+#define NUMBERS_FUNCTIONS_PARALLEL 2
 #define FILE_INPUT_SIZE 4*1024*1024
 
 static uint8_t input[FILE_INPUT_SIZE];
@@ -81,24 +81,40 @@ int main() {
         return status;
     }
 
-    Xil_DCacheFlushRange((UINTPTR)input, input_length);
+    int part_size = input_length / NUMBERS_FUNCTIONS_PARALLEL;
+    int remainder = input_length % NUMBERS_FUNCTIONS_PARALLEL;
+    int sizes[NUMBERS_FUNCTIONS_PARALLEL];
+    int offsets[NUMBERS_FUNCTIONS_PARALLEL];
+
+    for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; i++) {
+        sizes[i] = part_size + (i < remainder ? 1 : 0);
+        offsets[i] = (i == 0) ? 0 : offsets[i-1] + sizes[i-1];
+    }
+
+    Xil_DCacheFlushRange((UINTPTR)input + offsets[0], sizes[0]);
+    Xil_DCacheFlushRange((UINTPTR)input + offsets[1], sizes[1]);
     for (int i = 0; i< NUMBERS_FUNCTIONS_PARALLEL; i++) {
         Xil_DCacheFlushRange((UINTPTR)outputs[i], input_length * 2);
     }
 
-
     status = XTop_parallel_lzw_Initialize(&compressor, XPAR_TOP_PARALLEL_LZW_0_BASEADDR);
+    if (status != XST_SUCCESS) {
+        printf("Failed to initiliaze IP core, error code %d\n", status);
+        return 1;
+    }
 
-    XTop_parallel_lzw_Set_input_r(&compressor,  (UINTPTR)input);
+    XTop_parallel_lzw_Set_input1(&compressor, (UINTPTR)input + offsets[0]);
+    XTop_parallel_lzw_Set_input2(&compressor, (UINTPTR)input + offsets[1]);
+
+    XTop_parallel_lzw_Set_input_size1(&compressor, (UINTPTR)sizes[0]);
+    XTop_parallel_lzw_Set_input_size2(&compressor, (UINTPTR)sizes[1]);
+
     XTop_parallel_lzw_Set_output1(&compressor,  (UINTPTR)outputs[0]);
     XTop_parallel_lzw_Set_output2(&compressor,  (UINTPTR)outputs[1]);
-    XTop_parallel_lzw_Set_output3(&compressor,  (UINTPTR)outputs[2]);
-
-    XTop_parallel_lzw_Set_input_size(&compressor, input_length);
 
     start = get_global_time();
 
-    XTop_parallel_lzw_Start(&compressor);
+        XTop_parallel_lzw_Start(&compressor);
     while(!XTop_parallel_lzw_IsDone(&compressor));
 
     end = get_global_time();
@@ -109,18 +125,13 @@ int main() {
     printf("Parallel compression time : %.6f seconds\r\n", elapsed_time_sec);
 
     uint32_t compression_sizes[NUMBERS_FUNCTIONS_PARALLEL] = {0};
+    uint64_t total_compression_size = 0;
 
     compression_sizes[0] = XTop_parallel_lzw_Get_compression_size1(&compressor);
     compression_sizes[1] = XTop_parallel_lzw_Get_compression_size2(&compressor);
-    compression_sizes[2] = XTop_parallel_lzw_Get_compression_size3(&compressor);
 
     for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; i++) {
         Xil_DCacheInvalidateRange((UINTPTR)outputs[i], compression_sizes[i]);
-    }
-
-    uint64_t total_compression_size = 0;
-
-    for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; i++) {
         printf("Compression size of output number %d is : %lu\n", i+1, (unsigned long)compression_sizes[i]);
         total_compression_size += compression_sizes[i];
     }
@@ -129,4 +140,5 @@ int main() {
     printf("Compression ratio: %.2f%%\n", 100.0 * (double)total_compression_size / input_length);
 
     return 0;
+
 }

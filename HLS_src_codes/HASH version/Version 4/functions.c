@@ -111,6 +111,11 @@ void lzw_compress(uint8_t *input, uint8_t *output, int input_size, uint32_t *com
     uint8_t bit_count = 8;
     uint32_t out_index = 0;
     
+    if (input_size == 0) {
+        *compression_size = 0;
+        return;
+    }
+    
     if (input_size == 1) {
         write_output(input[0], output, bit_count, &out_index);
         *compression_size = (out_index + 7) /8;

@@ -12,7 +12,7 @@
 #include <xstatus.h>
 #include "ff.h"
 
-#define NUMBERS_FUNCTIONS_PARALLEL 2
+#define NUMBERS_FUNCTIONS_PARALLEL 10
 #define FILE_INPUT_SIZE 4*1024*1024
 
 static uint8_t input[FILE_INPUT_SIZE];
@@ -73,7 +73,7 @@ int main() {
     int status;
     int input_length = 0;
 
-    printf("\n-------------------------------------- Test 1 --------------------------------------\n");
+    printf("\n-------------------------------------- Test 1 - 10 Functions - 200MHz --------------------------------------\n");
 
     status = ReadSD(input, &input_length);
     if (status != XST_SUCCESS) {
@@ -91,9 +91,8 @@ int main() {
         offsets[i] = (i == 0) ? 0 : offsets[i-1] + sizes[i-1];
     }
 
-    Xil_DCacheFlushRange((UINTPTR)input + offsets[0], sizes[0]);
-    Xil_DCacheFlushRange((UINTPTR)input + offsets[1], sizes[1]);
     for (int i = 0; i< NUMBERS_FUNCTIONS_PARALLEL; i++) {
+        Xil_DCacheFlushRange((UINTPTR)input + offsets[i], sizes[i]);
         Xil_DCacheFlushRange((UINTPTR)outputs[i], input_length * 2);
     }
 
@@ -105,16 +104,40 @@ int main() {
 
     XTop_parallel_lzw_Set_input1(&compressor, (UINTPTR)input + offsets[0]);
     XTop_parallel_lzw_Set_input2(&compressor, (UINTPTR)input + offsets[1]);
+    XTop_parallel_lzw_Set_input3(&compressor, (UINTPTR)input + offsets[2]);
+    XTop_parallel_lzw_Set_input4(&compressor, (UINTPTR)input + offsets[3]);
+    XTop_parallel_lzw_Set_input5(&compressor, (UINTPTR)input + offsets[4]);
+    XTop_parallel_lzw_Set_input6(&compressor, (UINTPTR)input + offsets[5]);
+    XTop_parallel_lzw_Set_input7(&compressor, (UINTPTR)input + offsets[6]);
+    XTop_parallel_lzw_Set_input8(&compressor, (UINTPTR)input + offsets[7]);
+    XTop_parallel_lzw_Set_input9(&compressor, (UINTPTR)input + offsets[8]);
+    XTop_parallel_lzw_Set_input10(&compressor, (UINTPTR)input + offsets[9]);
 
     XTop_parallel_lzw_Set_input_size1(&compressor, (UINTPTR)sizes[0]);
     XTop_parallel_lzw_Set_input_size2(&compressor, (UINTPTR)sizes[1]);
+    XTop_parallel_lzw_Set_input_size3(&compressor, (UINTPTR)sizes[2]);
+    XTop_parallel_lzw_Set_input_size4(&compressor, (UINTPTR)sizes[3]);
+    XTop_parallel_lzw_Set_input_size5(&compressor, (UINTPTR)sizes[4]);
+    XTop_parallel_lzw_Set_input_size6(&compressor, (UINTPTR)sizes[5]);
+    XTop_parallel_lzw_Set_input_size7(&compressor, (UINTPTR)sizes[6]);
+    XTop_parallel_lzw_Set_input_size8(&compressor, (UINTPTR)sizes[7]);
+    XTop_parallel_lzw_Set_input_size9(&compressor, (UINTPTR)sizes[8]);
+    XTop_parallel_lzw_Set_input_size10(&compressor, (UINTPTR)sizes[9]);
 
     XTop_parallel_lzw_Set_output1(&compressor,  (UINTPTR)outputs[0]);
     XTop_parallel_lzw_Set_output2(&compressor,  (UINTPTR)outputs[1]);
+    XTop_parallel_lzw_Set_output3(&compressor,  (UINTPTR)outputs[2]);
+    XTop_parallel_lzw_Set_output4(&compressor,  (UINTPTR)outputs[3]);
+    XTop_parallel_lzw_Set_output5(&compressor,  (UINTPTR)outputs[4]);
+    XTop_parallel_lzw_Set_output6(&compressor,  (UINTPTR)outputs[5]);
+    XTop_parallel_lzw_Set_output7(&compressor,  (UINTPTR)outputs[6]);
+    XTop_parallel_lzw_Set_output8(&compressor,  (UINTPTR)outputs[7]);
+    XTop_parallel_lzw_Set_output9(&compressor,  (UINTPTR)outputs[8]);
+    XTop_parallel_lzw_Set_output10(&compressor,  (UINTPTR)outputs[9]);
 
     start = get_global_time();
 
-        XTop_parallel_lzw_Start(&compressor);
+    XTop_parallel_lzw_Start(&compressor);
     while(!XTop_parallel_lzw_IsDone(&compressor));
 
     end = get_global_time();
@@ -129,6 +152,14 @@ int main() {
 
     compression_sizes[0] = XTop_parallel_lzw_Get_compression_size1(&compressor);
     compression_sizes[1] = XTop_parallel_lzw_Get_compression_size2(&compressor);
+    compression_sizes[2] = XTop_parallel_lzw_Get_compression_size3(&compressor);
+    compression_sizes[3] = XTop_parallel_lzw_Get_compression_size4(&compressor);
+    compression_sizes[4] = XTop_parallel_lzw_Get_compression_size5(&compressor);
+    compression_sizes[5] = XTop_parallel_lzw_Get_compression_size6(&compressor);
+    compression_sizes[6] = XTop_parallel_lzw_Get_compression_size7(&compressor);
+    compression_sizes[7] = XTop_parallel_lzw_Get_compression_size8(&compressor);
+    compression_sizes[8] = XTop_parallel_lzw_Get_compression_size9(&compressor);
+    compression_sizes[9] = XTop_parallel_lzw_Get_compression_size10(&compressor);
 
     for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; i++) {
         Xil_DCacheInvalidateRange((UINTPTR)outputs[i], compression_sizes[i]);

@@ -1,5 +1,4 @@
 #include "functions.h"
-#include <cstdint>
 
 /**************************  Helper Functions Declarations ******************************/
 void init_dictionary(Dictionary *dictionary, bool *dictionary_used) {
@@ -154,28 +153,102 @@ void lzw_compress(uint8_t *input, uint8_t *output, int input_size, uint32_t *com
 void top_parallel_lzw(
     uint8_t* input1, int input_size1,
     uint8_t* input2, int input_size2,
+    uint8_t* input3, int input_size3,
+    uint8_t* input4, int input_size4,
+    uint8_t* input5, int input_size5,
+    uint8_t* input6, int input_size6,
+    uint8_t* input7, int input_size7,
+    uint8_t* input8, int input_size8,
+    uint8_t* input9, int input_size9,
+    uint8_t* input10, int input_size10,
     uint8_t* output1, uint32_t* compression_size1,
-    uint8_t* output2, uint32_t* compression_size2
+    uint8_t* output2, uint32_t* compression_size2,
+    uint8_t* output3, uint32_t* compression_size3,
+    uint8_t* output4, uint32_t* compression_size4,
+    uint8_t* output5, uint32_t* compression_size5,
+    uint8_t* output6, uint32_t* compression_size6,
+    uint8_t* output7, uint32_t* compression_size7,
+    uint8_t* output8, uint32_t* compression_size8,
+    uint8_t* output9, uint32_t* compression_size9,
+    uint8_t* output10, uint32_t* compression_size10
 ) {
-    #pragma HLS INTERFACE m_axi depth=input_size1 port=input1 offset=slave bundle=AXIM_IN1
-    #pragma HLS INTERFACE m_axi depth=input_size2 port=input2 offset=slave bundle=AXIM_IN2
-    #pragma HLS INTERFACE m_axi depth=input_size1 port=output1 offset=slave bundle=AXIM_OUT1
-    #pragma HLS INTERFACE m_axi depth=input_size2 port=output2 offset=slave bundle=AXIM_OUT2
+    #pragma HLS INTERFACE m_axi depth=input_size1   port=input1     offset=slave bundle=AXIM_1
+    #pragma HLS INTERFACE m_axi depth=input_size2   port=input2     offset=slave bundle=AXIM_2
+    #pragma HLS INTERFACE m_axi depth=input_size3   port=input3     offset=slave bundle=AXIM_3
+    #pragma HLS INTERFACE m_axi depth=input_size4   port=input4     offset=slave bundle=AXIM_4
+    #pragma HLS INTERFACE m_axi depth=input_size5   port=input5     offset=slave bundle=AXIM_5
+    #pragma HLS INTERFACE m_axi depth=input_size6   port=input6     offset=slave bundle=AXIM_6
+    #pragma HLS INTERFACE m_axi depth=input_size7   port=input7     offset=slave bundle=AXIM_7
+    #pragma HLS INTERFACE m_axi depth=input_size8   port=input8     offset=slave bundle=AXIM_8
+    #pragma HLS INTERFACE m_axi depth=input_size9   port=input9     offset=slave bundle=AXIM_9
+    #pragma HLS INTERFACE m_axi depth=input_size10  port=input10    offset=slave bundle=AXIM_10
+
+    #pragma HLS INTERFACE m_axi depth=input_size1   port=output1    offset=slave bundle=AXIM_1
+    #pragma HLS INTERFACE m_axi depth=input_size2   port=output2    offset=slave bundle=AXIM_2
+    #pragma HLS INTERFACE m_axi depth=input_size3   port=output3    offset=slave bundle=AXIM_3
+    #pragma HLS INTERFACE m_axi depth=input_size4   port=output4    offset=slave bundle=AXIM_4
+    #pragma HLS INTERFACE m_axi depth=input_size5   port=output5    offset=slave bundle=AXIM_5
+    #pragma HLS INTERFACE m_axi depth=input_size6   port=output6    offset=slave bundle=AXIM_6
+    #pragma HLS INTERFACE m_axi depth=input_size7   port=output7    offset=slave bundle=AXIM_7
+    #pragma HLS INTERFACE m_axi depth=input_size8   port=output8    offset=slave bundle=AXIM_8
+    #pragma HLS INTERFACE m_axi depth=input_size9   port=output9    offset=slave bundle=AXIM_9
+    #pragma HLS INTERFACE m_axi depth=input_size10  port=output10   offset=slave bundle=AXIM_10
 
     #pragma HLS INTERFACE s_axilite port=input1   bundle=control
     #pragma HLS INTERFACE s_axilite port=input2   bundle=control
+    #pragma HLS INTERFACE s_axilite port=input3   bundle=control
+    #pragma HLS INTERFACE s_axilite port=input4   bundle=control
+    #pragma HLS INTERFACE s_axilite port=input5   bundle=control
+    #pragma HLS INTERFACE s_axilite port=input6   bundle=control
+    #pragma HLS INTERFACE s_axilite port=input7   bundle=control
+    #pragma HLS INTERFACE s_axilite port=input8   bundle=control
+    #pragma HLS INTERFACE s_axilite port=input9   bundle=control
+    #pragma HLS INTERFACE s_axilite port=input10   bundle=control
+
     #pragma HLS INTERFACE s_axilite port=output1  bundle=control
-    #pragma HLS INTERFACE s_axilite port=output2 bundle=control
+    #pragma HLS INTERFACE s_axilite port=output2  bundle=control
+    #pragma HLS INTERFACE s_axilite port=output3  bundle=control
+    #pragma HLS INTERFACE s_axilite port=output4  bundle=control
+    #pragma HLS INTERFACE s_axilite port=output5  bundle=control
+    #pragma HLS INTERFACE s_axilite port=output6  bundle=control
+    #pragma HLS INTERFACE s_axilite port=output7  bundle=control
+    #pragma HLS INTERFACE s_axilite port=output8  bundle=control
+    #pragma HLS INTERFACE s_axilite port=output9  bundle=control
+    #pragma HLS INTERFACE s_axilite port=output10 bundle=control
 
     #pragma HLS INTERFACE s_axilite port=return  bundle=control
 
     #pragma HLS INTERFACE s_axilite port=input_size1    bundle=control
     #pragma HLS INTERFACE s_axilite port=input_size2    bundle=control
-    #pragma HLS INTERFACE s_axilite port=compression_size1 bundle=control
-    #pragma HLS INTERFACE s_axilite port=compression_size2 bundle=control
+    #pragma HLS INTERFACE s_axilite port=input_size3    bundle=control
+    #pragma HLS INTERFACE s_axilite port=input_size4    bundle=control
+    #pragma HLS INTERFACE s_axilite port=input_size5    bundle=control
+    #pragma HLS INTERFACE s_axilite port=input_size6    bundle=control
+    #pragma HLS INTERFACE s_axilite port=input_size7    bundle=control
+    #pragma HLS INTERFACE s_axilite port=input_size8    bundle=control
+    #pragma HLS INTERFACE s_axilite port=input_size9    bundle=control
+    #pragma HLS INTERFACE s_axilite port=input_size10   bundle=control
 
+    #pragma HLS INTERFACE s_axilite port=compression_size1  bundle=control
+    #pragma HLS INTERFACE s_axilite port=compression_size2  bundle=control
+    #pragma HLS INTERFACE s_axilite port=compression_size3  bundle=control
+    #pragma HLS INTERFACE s_axilite port=compression_size4  bundle=control
+    #pragma HLS INTERFACE s_axilite port=compression_size5  bundle=control
+    #pragma HLS INTERFACE s_axilite port=compression_size6  bundle=control
+    #pragma HLS INTERFACE s_axilite port=compression_size7  bundle=control
+    #pragma HLS INTERFACE s_axilite port=compression_size8  bundle=control
+    #pragma HLS INTERFACE s_axilite port=compression_size9  bundle=control
+    #pragma HLS INTERFACE s_axilite port=compression_size10 bundle=control   
 
     #pragma HLS DATAFLOW
     lzw_compress(input1, output1, input_size1, compression_size1);
     lzw_compress(input2, output2, input_size2, compression_size2);
+    lzw_compress(input3, output3, input_size3, compression_size3);
+    lzw_compress(input4, output4, input_size4, compression_size4);
+    lzw_compress(input5, output5, input_size5, compression_size5);
+    lzw_compress(input6, output6, input_size6, compression_size6);
+    lzw_compress(input7, output7, input_size7, compression_size7);
+    lzw_compress(input8, output8, input_size8, compression_size8);
+    lzw_compress(input9, output9, input_size9, compression_size9);
+    lzw_compress(input10, output10, input_size10, compression_size10);
 }

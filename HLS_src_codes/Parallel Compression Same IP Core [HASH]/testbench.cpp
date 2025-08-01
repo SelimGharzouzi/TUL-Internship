@@ -4,8 +4,8 @@
 
 int main(void)
 {   
-    int size = 9;
-    uint8_t input[] = "ABAABAAAB";
+    int size = 30;
+    uint8_t input[] = "ABAABAABAABAABAABAABAABAABAABA";
     uint8_t outputs[NUMBER_PARALLEL_FUNCTIONS][32] = {{0}};
     uint32_t compression_sizes[NUMBER_PARALLEL_FUNCTIONS] = {0};
 
@@ -21,9 +21,25 @@ int main(void)
 
     top_parallel_lzw(
         input + offsets[0], sizes[0],
-        input + offsets[1], sizes[1], 
+        input + offsets[1], sizes[1],
+        input + offsets[2], sizes[2],
+        input + offsets[3], sizes[3],
+        input + offsets[4], sizes[4],
+        input + offsets[5], sizes[5],
+        input + offsets[6], sizes[6],
+        input + offsets[7], sizes[7],
+        input + offsets[8], sizes[8],
+        input + offsets[9], sizes[9],  
         outputs[0], &compression_sizes[0],
-        outputs[1], &compression_sizes[1]
+        outputs[1], &compression_sizes[1],
+        outputs[2], &compression_sizes[2],
+        outputs[3], &compression_sizes[3],
+        outputs[4], &compression_sizes[4],
+        outputs[5], &compression_sizes[5],
+        outputs[6], &compression_sizes[6],
+        outputs[7], &compression_sizes[7],
+        outputs[8], &compression_sizes[8],
+        outputs[9], &compression_sizes[9]
     );
 
     printf("\n");

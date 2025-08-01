@@ -12,7 +12,7 @@
 /************************** Constant Definitions ******************************/
 #define MAX_DICTIONARY_SIZE         4096           // Maximum size of the LZW dictionary (12-bit codes)
 #define INVALID_CODE                0xFFFF         // Used to represent an invalid or non-existent code
-#define NUMBER_PARALLEL_FUNCTIONS   2              // Used to determine the number of functions implemented to run in parallel
+#define NUMBER_PARALLEL_FUNCTIONS   10             // Used to determine the number of functions implemented to run in parallel
 
 /**************************** Type Definitions *******************************/
 /**
@@ -119,8 +119,24 @@ void lzw_compress(uint8_t *input, uint8_t *output, int input_size, uint32_t *com
 void top_parallel_lzw(
     uint8_t* input1, int input_size1,
     uint8_t* input2, int input_size2,
+    uint8_t* input3, int input_size3,
+    uint8_t* input4, int input_size4,
+    uint8_t* input5, int input_size5,
+    uint8_t* input6, int input_size6,
+    uint8_t* input7, int input_size7,
+    uint8_t* input8, int input_size8,
+    uint8_t* input9, int input_size9,
+    uint8_t* input10, int input_size10,
     uint8_t* output1, uint32_t* compression_size1,
-    uint8_t* output2, uint32_t* compression_size2
+    uint8_t* output2, uint32_t* compression_size2,
+    uint8_t* output3, uint32_t* compression_size3,
+    uint8_t* output4, uint32_t* compression_size4,
+    uint8_t* output5, uint32_t* compression_size5,
+    uint8_t* output6, uint32_t* compression_size6,
+    uint8_t* output7, uint32_t* compression_size7,
+    uint8_t* output8, uint32_t* compression_size8,
+    uint8_t* output9, uint32_t* compression_size9,
+    uint8_t* output10, uint32_t* compression_size10
 );
 
 

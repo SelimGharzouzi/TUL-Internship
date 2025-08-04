@@ -12,7 +12,7 @@
 #include <xstatus.h>
 #include "ff.h"
 
-#define NUMBER_OF_CORES 10
+#define NUMBER_OF_CORES 12
 #define FILE_INPUT_SIZE 4*1024*1024
 
 static uint8_t input[FILE_INPUT_SIZE];
@@ -28,7 +28,9 @@ UINTPTR base_addrs[NUMBER_OF_CORES] = {
     XPAR_LZW_COMPRESS_6_BASEADDR,
     XPAR_LZW_COMPRESS_7_BASEADDR,
     XPAR_LZW_COMPRESS_8_BASEADDR,
-    XPAR_LZW_COMPRESS_9_BASEADDR
+    XPAR_LZW_COMPRESS_9_BASEADDR,
+    XPAR_LZW_COMPRESS_10_BASEADDR,
+    XPAR_LZW_COMPRESS_11_BASEADDR
 };
 
 FIL fil;
@@ -146,7 +148,7 @@ int main() {
     int status;
     int input_length = 0;
 
-    printf("\n-------------------------------------- Test 1 - 200 MHz - 10 IPs --------------------------------------\n");
+    printf("\n-------------------------------------- Test 1 - 200 MHz - 12 IPs --------------------------------------\n");
 
     status = ReadSD(input, &input_length);
     if (status != XST_SUCCESS) {

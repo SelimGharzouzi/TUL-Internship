@@ -1,4 +1,4 @@
-#include "xtop_parallel_lzw.h"
+#include "xlzw_compress.h"
 #include "xparameters.h"
 #include "xil_cache.h"
 #include <stdint.h>
@@ -12,17 +12,32 @@
 #include <xstatus.h>
 #include "ff.h"
 
-#define NUMBERS_FUNCTIONS_PARALLEL 10
+#define NUMBER_OF_CORES 12
 #define FILE_INPUT_SIZE 4*1024*1024
 
 static uint8_t input[FILE_INPUT_SIZE];
-uint8_t outputs[NUMBERS_FUNCTIONS_PARALLEL][2 * (FILE_INPUT_SIZE / NUMBERS_FUNCTIONS_PARALLEL)] = {{0}};
+uint8_t outputs[NUMBER_OF_CORES][2 * (FILE_INPUT_SIZE / NUMBER_OF_CORES)] = {{0}};
+
+UINTPTR base_addrs[NUMBER_OF_CORES] = {
+    XPAR_LZW_COMPRESS_0_BASEADDR,
+    XPAR_LZW_COMPRESS_1_BASEADDR,
+    XPAR_LZW_COMPRESS_2_BASEADDR,
+    XPAR_LZW_COMPRESS_3_BASEADDR,
+    XPAR_LZW_COMPRESS_4_BASEADDR,
+    XPAR_LZW_COMPRESS_5_BASEADDR,
+    XPAR_LZW_COMPRESS_6_BASEADDR,
+    XPAR_LZW_COMPRESS_7_BASEADDR,
+    XPAR_LZW_COMPRESS_8_BASEADDR,
+    XPAR_LZW_COMPRESS_9_BASEADDR,
+    XPAR_LZW_COMPRESS_10_BASEADDR,
+    XPAR_LZW_COMPRESS_11_BASEADDR
+};
 
 FIL fil;
 FATFS fatfs;
 static const TCHAR *Path = "0:";
 static char finput[32] = "input.txt";
-static char foutput[32] = "output.txt";
+static char foutput[32] = "output.bin";
 
 int ReadSD(uint8_t *input, int *input_length){
     FRESULT Res;
@@ -56,7 +71,7 @@ int ReadSD(uint8_t *input, int *input_length){
     return XST_SUCCESS;
 }
 
-int WriteSD(uint8_t outputs[NUMBERS_FUNCTIONS_PARALLEL][2 * (FILE_INPUT_SIZE / NUMBERS_FUNCTIONS_PARALLEL)], uint32_t compression_sizes[NUMBERS_FUNCTIONS_PARALLEL]) {
+int WriteSD(uint8_t outputs[NUMBER_OF_CORES][2 * (FILE_INPUT_SIZE / NUMBER_OF_CORES)], uint32_t compression_sizes[NUMBER_OF_CORES]) {
     FRESULT Res;
     UINT NumBytesWritten;
     UINT TotalNumBytesWritten = 0;
@@ -75,8 +90,8 @@ int WriteSD(uint8_t outputs[NUMBERS_FUNCTIONS_PARALLEL][2 * (FILE_INPUT_SIZE / N
     
     char header[128] = {0};
     UINT header_len = 0;
-    header_len += snprintf(header + header_len, sizeof(header) - header_len, "%d", NUMBERS_FUNCTIONS_PARALLEL);
-    for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; i++) {
+    header_len += snprintf(header + header_len, sizeof(header) - header_len, "%d", NUMBER_OF_CORES);
+    for (int i = 0; i < NUMBER_OF_CORES; i++) {
         header_len += snprintf(header + header_len, sizeof(header) - header_len, " %u", compression_sizes[i]);
     }
     header_len += snprintf(header + header_len, sizeof(header) - header_len, "\n");
@@ -90,7 +105,7 @@ int WriteSD(uint8_t outputs[NUMBERS_FUNCTIONS_PARALLEL][2 * (FILE_INPUT_SIZE / N
 
     TotalNumBytesWritten += NumBytesWritten;
 
-    for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; i++) {
+    for (int i = 0; i < NUMBER_OF_CORES; i++) {
         Res = f_write(&fil, outputs[i], compression_sizes[i], &NumBytesWritten);
         if (Res != FR_OK || NumBytesWritten != compression_sizes[i]) {
             printf("Data write failed at core %d\n", i);
@@ -118,103 +133,82 @@ static inline uint64_t get_global_time() {
     return ((uint64_t)hi1 << 32) | lo;
 }
 
+void print_decimal(const uint8_t* data, uint32_t size) {
+    for (uint32_t i = 0; i < size; i++) {
+        printf("%u ", data[i]);
+        if ((i + 1) % 16 == 0) printf("\n");
+    }
+    printf("\n");
+}
+
 int main() {
-    XTop_parallel_lzw compressor;
+    XLzw_compress compressors[NUMBER_OF_CORES];
+
     uint64_t start, end;
     int status;
     int input_length = 0;
 
-    printf("\n-------------------------------------- Test 1 - 10 Functions - 200MHz --------------------------------------\n");
+    printf("\n-------------------------------------- Test 1 - 200 MHz - 12 IPs --------------------------------------\n");
 
     status = ReadSD(input, &input_length);
     if (status != XST_SUCCESS) {
         printf("Failed to read sd card, %d\r\n", status);
-        return status;
     }
 
-    int part_size = input_length / NUMBERS_FUNCTIONS_PARALLEL;
-    int remainder = input_length % NUMBERS_FUNCTIONS_PARALLEL;
-    int sizes[NUMBERS_FUNCTIONS_PARALLEL];
-    int offsets[NUMBERS_FUNCTIONS_PARALLEL];
+    int part_size = input_length / NUMBER_OF_CORES;
+    int remainder = input_length % NUMBER_OF_CORES;
+    int sizes[NUMBER_OF_CORES];
+    int offsets[NUMBER_OF_CORES];
 
-    for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; i++) {
+    for (int i = 0; i < NUMBER_OF_CORES; i++) {
         sizes[i] = part_size + (i < remainder ? 1 : 0);
         offsets[i] = (i == 0) ? 0 : offsets[i-1] + sizes[i-1];
     }
 
-    for (int i = 0; i< NUMBERS_FUNCTIONS_PARALLEL; i++) {
+    for (int i = 0; i < NUMBER_OF_CORES; i++) {
+        status = XLzw_compress_Initialize(&compressors[i], base_addrs[i]);
+        if (status != XST_SUCCESS) {
+            printf("Failed to initialize Lzw_compress HW, %d\r\n", status);
+            return 1;
+        }
+
         Xil_DCacheFlushRange((UINTPTR)input + offsets[i], sizes[i]);
-        Xil_DCacheFlushRange((UINTPTR)outputs[i], input_length * 2);
+        Xil_DCacheFlushRange((UINTPTR)outputs[i], sizes[i] * 2 );
+
+        XLzw_compress_Set_input_r(&compressors[i], (UINTPTR)input + offsets[i]);
+        XLzw_compress_Set_output_r(&compressors[i], (UINTPTR)outputs[i]);
+        XLzw_compress_Set_input_size(&compressors[i], sizes[i]);
     }
 
-    status = XTop_parallel_lzw_Initialize(&compressor, XPAR_TOP_PARALLEL_LZW_0_BASEADDR);
-    if (status != XST_SUCCESS) {
-        printf("Failed to initiliaze IP core, error code %d\n", status);
-        return 1;
-    }
-
-    XTop_parallel_lzw_Set_input1(&compressor, (UINTPTR)input + offsets[0]);
-    XTop_parallel_lzw_Set_input2(&compressor, (UINTPTR)input + offsets[1]);
-    XTop_parallel_lzw_Set_input3(&compressor, (UINTPTR)input + offsets[2]);
-    XTop_parallel_lzw_Set_input4(&compressor, (UINTPTR)input + offsets[3]);
-    XTop_parallel_lzw_Set_input5(&compressor, (UINTPTR)input + offsets[4]);
-    XTop_parallel_lzw_Set_input6(&compressor, (UINTPTR)input + offsets[5]);
-    XTop_parallel_lzw_Set_input7(&compressor, (UINTPTR)input + offsets[6]);
-    XTop_parallel_lzw_Set_input8(&compressor, (UINTPTR)input + offsets[7]);
-    XTop_parallel_lzw_Set_input9(&compressor, (UINTPTR)input + offsets[8]);
-    XTop_parallel_lzw_Set_input10(&compressor, (UINTPTR)input + offsets[9]);
-
-    XTop_parallel_lzw_Set_input_size1(&compressor, (UINTPTR)sizes[0]);
-    XTop_parallel_lzw_Set_input_size2(&compressor, (UINTPTR)sizes[1]);
-    XTop_parallel_lzw_Set_input_size3(&compressor, (UINTPTR)sizes[2]);
-    XTop_parallel_lzw_Set_input_size4(&compressor, (UINTPTR)sizes[3]);
-    XTop_parallel_lzw_Set_input_size5(&compressor, (UINTPTR)sizes[4]);
-    XTop_parallel_lzw_Set_input_size6(&compressor, (UINTPTR)sizes[5]);
-    XTop_parallel_lzw_Set_input_size7(&compressor, (UINTPTR)sizes[6]);
-    XTop_parallel_lzw_Set_input_size8(&compressor, (UINTPTR)sizes[7]);
-    XTop_parallel_lzw_Set_input_size9(&compressor, (UINTPTR)sizes[8]);
-    XTop_parallel_lzw_Set_input_size10(&compressor, (UINTPTR)sizes[9]);
-
-    XTop_parallel_lzw_Set_output1(&compressor,  (UINTPTR)outputs[0]);
-    XTop_parallel_lzw_Set_output2(&compressor,  (UINTPTR)outputs[1]);
-    XTop_parallel_lzw_Set_output3(&compressor,  (UINTPTR)outputs[2]);
-    XTop_parallel_lzw_Set_output4(&compressor,  (UINTPTR)outputs[3]);
-    XTop_parallel_lzw_Set_output5(&compressor,  (UINTPTR)outputs[4]);
-    XTop_parallel_lzw_Set_output6(&compressor,  (UINTPTR)outputs[5]);
-    XTop_parallel_lzw_Set_output7(&compressor,  (UINTPTR)outputs[6]);
-    XTop_parallel_lzw_Set_output8(&compressor,  (UINTPTR)outputs[7]);
-    XTop_parallel_lzw_Set_output9(&compressor,  (UINTPTR)outputs[8]);
-    XTop_parallel_lzw_Set_output10(&compressor,  (UINTPTR)outputs[9]);
+	// for (int i = 0; i < NUMBER_OF_CORES; i++) {
+	//     printf("Input data of chunk %d (%d bytes):\n", i, sizes[i]);
+	//     print_decimal(input+offsets[i], sizes[i]);       
+	// }
 
     start = get_global_time();
 
-    XTop_parallel_lzw_Start(&compressor);
-    while(!XTop_parallel_lzw_IsDone(&compressor));
+    for (int i = 0; i < NUMBER_OF_CORES; i++) {
+        XLzw_compress_Start(&compressors[i]);
+    }
+
+    for (int i = 0; i < NUMBER_OF_CORES; i++) {
+        while (!XLzw_compress_IsDone(&compressors[i]));
+    }
 
     end = get_global_time();
 
     uint64_t elapsed_cycles = end - start;
-    double elapsed_time_sec = (double)elapsed_cycles/ XPAR_CPU_CORE_CLOCK_FREQ_HZ;
+    double elapsed_time_sec = (double)elapsed_cycles / XPAR_CPU_CORE_CLOCK_FREQ_HZ;
 
-    printf("Parallel compression time : %.6f seconds\r\n", elapsed_time_sec);
+    printf("Total compression time: %.6f seconds\r\n", elapsed_time_sec);
 
-    uint32_t compression_sizes[NUMBERS_FUNCTIONS_PARALLEL] = {0};
+    uint32_t compression_sizes[NUMBER_OF_CORES];
     uint64_t total_compression_size = 0;
 
-    compression_sizes[0] = XTop_parallel_lzw_Get_compression_size1(&compressor);
-    compression_sizes[1] = XTop_parallel_lzw_Get_compression_size2(&compressor);
-    compression_sizes[2] = XTop_parallel_lzw_Get_compression_size3(&compressor);
-    compression_sizes[3] = XTop_parallel_lzw_Get_compression_size4(&compressor);
-    compression_sizes[4] = XTop_parallel_lzw_Get_compression_size5(&compressor);
-    compression_sizes[5] = XTop_parallel_lzw_Get_compression_size6(&compressor);
-    compression_sizes[6] = XTop_parallel_lzw_Get_compression_size7(&compressor);
-    compression_sizes[7] = XTop_parallel_lzw_Get_compression_size8(&compressor);
-    compression_sizes[8] = XTop_parallel_lzw_Get_compression_size9(&compressor);
-    compression_sizes[9] = XTop_parallel_lzw_Get_compression_size10(&compressor);
-
-    for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; i++) {
+    for (int i = 0; i < NUMBER_OF_CORES; i++) {
+        compression_sizes[i] = XLzw_compress_Get_compression_size(&compressors[i]);
+        //printf("Compression size of core %d is : %u\n", i, compression_sizes[i]);
         Xil_DCacheInvalidateRange((UINTPTR)outputs[i], compression_sizes[i]);
-        printf("Compression size of output number %d is : %lu\n", i+1, (unsigned long)compression_sizes[i]);
         total_compression_size += compression_sizes[i];
     }
 
@@ -226,6 +220,10 @@ int main() {
         printf("WriteSD failed, error code %d\n", status);
     }
 
-    return 0;
+    // for (int i = 0; i < NUMBER_OF_CORES; i++) {
+    //     printf("Core %d compressed output (%u bytes, decimal values):\n", i, compression_sizes[i]);
+    //     print_decimal(outputs[i], compression_sizes[i]);
+    // }
 
+    return 0;
 }

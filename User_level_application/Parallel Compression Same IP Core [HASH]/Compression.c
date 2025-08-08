@@ -16,12 +16,13 @@
 #define FILE_INPUT_SIZE 4*1024*1024
 
 static uint8_t input[FILE_INPUT_SIZE];
-uint8_t outputs[NUMBERS_FUNCTIONS_PARALLEL][2 * FILE_INPUT_SIZE] = {{0}};
+uint8_t outputs[NUMBERS_FUNCTIONS_PARALLEL][2 * (FILE_INPUT_SIZE / NUMBERS_FUNCTIONS_PARALLEL)] = {{0}};
 
 FIL fil;
 FATFS fatfs;
 static const TCHAR *Path = "0:";
 static char finput[32] = "input.txt";
+static char foutput[32] = "output.txt";
 
 int ReadSD(uint8_t *input, int *input_length){
     FRESULT Res;
@@ -52,6 +53,56 @@ int ReadSD(uint8_t *input, int *input_length){
     printf("Read %u bytes from SD card.\n", NumBytesRead);
     (* input_length) = NumBytesRead;
 
+    return XST_SUCCESS;
+}
+
+int WriteSD(uint8_t outputs[NUMBERS_FUNCTIONS_PARALLEL][2 * (FILE_INPUT_SIZE / NUMBERS_FUNCTIONS_PARALLEL)], uint32_t compression_sizes[NUMBERS_FUNCTIONS_PARALLEL]) {
+    FRESULT Res;
+    UINT NumBytesWritten;
+    UINT TotalNumBytesWritten = 0;
+
+    Res = f_mount(&fatfs, Path, 0);
+    if (Res != FR_OK){
+        printf("Mount failed, error code %d\n", Res);
+        return XST_FAILURE;
+    }
+
+    Res = f_open(&fil, foutput, FA_CREATE_ALWAYS | FA_WRITE);
+    if (Res != FR_OK){
+        printf("Open failed, error code %d\n", Res);
+        return XST_FAILURE;
+    }
+    
+    char header[128] = {0};
+    UINT header_len = 0;
+    header_len += snprintf(header + header_len, sizeof(header) - header_len, "%d", NUMBERS_FUNCTIONS_PARALLEL);
+    for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; i++) {
+        header_len += snprintf(header + header_len, sizeof(header) - header_len, " %u", compression_sizes[i]);
+    }
+    header_len += snprintf(header + header_len, sizeof(header) - header_len, "\n");
+
+    Res = f_write(&fil, header, header_len, &NumBytesWritten);
+    if (Res != FR_OK || NumBytesWritten != header_len) {
+        printf("Header write failed, error code %d\n", Res);
+        f_close(&fil);
+        return XST_FAILURE;
+    }
+
+    TotalNumBytesWritten += NumBytesWritten;
+
+    for (int i = 0; i < NUMBERS_FUNCTIONS_PARALLEL; i++) {
+        Res = f_write(&fil, outputs[i], compression_sizes[i], &NumBytesWritten);
+        if (Res != FR_OK || NumBytesWritten != compression_sizes[i]) {
+            printf("Data write failed at core %d\n", i);
+            f_close(&fil);
+            return XST_FAILURE;
+        }
+        TotalNumBytesWritten += NumBytesWritten;
+    }
+
+    printf("Wrote %d bytes to the SD card\n", TotalNumBytesWritten);
+
+    f_close(&fil); 
     return XST_SUCCESS;
 }
 
@@ -169,6 +220,11 @@ int main() {
 
     printf("Total compression size = %lu\n", (unsigned long)total_compression_size);
     printf("Compression ratio: %.2f%%\n", 100.0 * (double)total_compression_size / input_length);
+
+    status = WriteSD(outputs, compression_sizes);
+    if (status != XST_SUCCESS){
+        printf("WriteSD failed, error code %d\n", status);
+    }
 
     return 0;
 

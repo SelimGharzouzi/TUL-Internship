@@ -203,7 +203,7 @@ void top_parallel_lzw(
     #pragma HLS INTERFACE s_axilite port=input7   bundle=control
     #pragma HLS INTERFACE s_axilite port=input8   bundle=control
     #pragma HLS INTERFACE s_axilite port=input9   bundle=control
-    #pragma HLS INTERFACE s_axilite port=input10   bundle=control
+    #pragma HLS INTERFACE s_axilite port=input10  bundle=control
 
     #pragma HLS INTERFACE s_axilite port=output1  bundle=control
     #pragma HLS INTERFACE s_axilite port=output2  bundle=control

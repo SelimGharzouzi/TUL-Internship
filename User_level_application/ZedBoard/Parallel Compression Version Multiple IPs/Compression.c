@@ -14,6 +14,7 @@
 
 #define NUMBER_OF_CORES 12
 #define FILE_INPUT_SIZE 4*1024*1024
+#define COUNTER_CLK_FREQ_HZ XPAR_CPU_CORE_CLOCK_FREQ_HZ/2
 
 static uint8_t input[FILE_INPUT_SIZE];
 uint8_t outputs[NUMBER_OF_CORES][2 * (FILE_INPUT_SIZE / NUMBER_OF_CORES)] = {{0}};
@@ -198,7 +199,7 @@ int main() {
     end = get_global_time();
 
     uint64_t elapsed_cycles = end - start;
-    double elapsed_time_sec = (double)elapsed_cycles / XPAR_CPU_CORE_CLOCK_FREQ_HZ;
+    double elapsed_time_sec = (double)elapsed_cycles / COUNTER_CLK_FREQ_HZ;
 
     printf("Total compression time: %.6f seconds\r\n", elapsed_time_sec);
 

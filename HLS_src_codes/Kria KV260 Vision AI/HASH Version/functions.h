@@ -35,7 +35,8 @@ void init_dictionary(void);
  *
  * @return Hash value for dictionary indexing           
  */
-uint32_t hash(uint16_t prefix, uint8_t ext);
+uint32_t hash1(uint16_t prefix, uint8_t ext);
+uint32_t hash2(uint16_t prefix, uint8_t ext);
 
 /**
  * @brief Finds the code for a given prefix + extension entry in the dictionary.

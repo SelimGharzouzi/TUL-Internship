@@ -1,4 +1,5 @@
 #include "xlzw_compress.h"
+#include "input.h"
 #include "xparameters.h"
 #include "xil_cache.h"
 #include <stdint.h>
@@ -6,23 +7,15 @@
 #include <stdio.h>
 #include <string.h>
 #include <xil_types.h>
-#include "xscutimer.h"
 #include <stdbool.h>
 #include <xstatus.h>
-#include "ff.h"
 
 #define MAX_DICTIONARY_SIZE 4096
 #define INVALID_CODE 0xFFFF
 #define FILE_INPUT_SIZE 4*1024*1024
 
-static uint8_t input[FILE_INPUT_SIZE];
 static uint8_t output[2 * FILE_INPUT_SIZE] = {0};
 static uint8_t output_sw[2 * FILE_INPUT_SIZE] = {0};
-
-FIL fil;
-FATFS fatfs;
-static const TCHAR *Path = "0:";
-static char finput[32] = "input.txt";
 
 typedef struct {
     uint16_t prefix_code;
@@ -32,10 +25,6 @@ typedef struct {
 
 static DictionaryEntry dictionary[MAX_DICTIONARY_SIZE];
 static bool dictionary_used[MAX_DICTIONARY_SIZE];
-
-static inline uint32_t hash(uint16_t prefix, uint8_t ext) {
-    return ((prefix << 5) ^ ext) % MAX_DICTIONARY_SIZE;
-}
 
 static void init_dictionary(void){
     memset(dictionary_used, 0, sizeof(dictionary_used));
@@ -47,10 +36,25 @@ static void init_dictionary(void){
     }
 }
 
-static uint16_t Dictionary_find(uint16_t prefix, uint8_t ext) {
-    uint32_t h = hash(prefix, ext);
+void Dictionary_reset(uint16_t *dictionary_size, uint8_t *bit_count) {
+    (*dictionary_size) = 256;
+    (*bit_count) = 8;
+    init_dictionary();
+}
+
+uint32_t hash1(uint16_t prefix, uint8_t ext) {
+    return ((prefix << 8) ^ ext) & (MAX_DICTIONARY_SIZE - 1);
+}
+
+uint32_t hash2(uint16_t prefix, uint8_t ext) {
+    return (((prefix << 5) ^ (ext * 7)) & (MAX_DICTIONARY_SIZE - 1)) | 1;
+}
+
+uint16_t Dictionary_find(uint16_t prefix, uint8_t ext) {
+    uint32_t h1 = hash1(prefix, ext);
+    uint32_t h2 = hash2(prefix, ext);
     for (uint32_t i = 0; i < MAX_DICTIONARY_SIZE; i++) {
-        uint32_t idx = (h + i) % MAX_DICTIONARY_SIZE;
+        uint32_t idx = (h1 + i * h2) & (MAX_DICTIONARY_SIZE - 1);
         if (!dictionary_used[idx]) return INVALID_CODE;
         if (dictionary[idx].prefix_code == prefix && dictionary[idx].ext_byte == ext)
             return dictionary[idx].code;
@@ -58,19 +62,21 @@ static uint16_t Dictionary_find(uint16_t prefix, uint8_t ext) {
     return INVALID_CODE;
 }
 
-static void Dictionary_add(uint16_t prefix, uint8_t ext, uint16_t *dictionary_size, uint8_t *bit_count) {
-    if (*dictionary_size >= MAX_DICTIONARY_SIZE) return;
+void Dictionary_add(uint16_t prefix, uint8_t ext, uint16_t *dictionary_size, uint8_t *bit_count) {
+    if (*dictionary_size >= MAX_DICTIONARY_SIZE) Dictionary_reset(dictionary_size, bit_count);
     if (*dictionary_size >= (1u << *bit_count)) (*bit_count)++;
-    uint32_t h = hash(prefix, ext);
+
+    uint32_t h1 = hash1(prefix, ext);
+    uint32_t h2 = hash2(prefix, ext);
     for (uint32_t i = 0; i < MAX_DICTIONARY_SIZE; i++) {
-        uint32_t idx = (h + i) % MAX_DICTIONARY_SIZE;
+        uint32_t idx = (h1 + i * h2) & (MAX_DICTIONARY_SIZE - 1);
         if (!dictionary_used[idx]) {
             dictionary[idx].prefix_code = prefix;
             dictionary[idx].ext_byte = ext;
             dictionary[idx].code = *dictionary_size;
             dictionary_used[idx] = true;
             (*dictionary_size)++;
-            break;
+            return;
         }
     }
 }
@@ -119,48 +125,24 @@ void lzw_compress_sw(uint8_t *input, uint8_t *output, int input_size, uint32_t *
     *compression_size = (out_index + 7) / 8;
 }
 
-int ReadSD(uint8_t *input, int *input_length){
-    FRESULT Res;
-    UINT NumBytesRead;
-
-    Res = f_mount(&fatfs, Path, 0);
-    if (Res != FR_OK) {
-        printf("Mount failed\n");
-        return XST_FAILURE;
-    }
-
-    Res = f_open(&fil, finput, FA_READ);
-    if (Res != FR_OK) {
-        printf("Open failed\n");
-        return XST_FAILURE;
-    }
-
-    Res = f_read(&fil, input, sizeof(input[0]) * (4 * FILE_INPUT_SIZE), &NumBytesRead);
-    if (Res != FR_OK){
-        printf("Read failed\n");
-        printf("Res = %d\n", Res);
-        f_close(&fil);
-        return XST_FAILURE;
-    }
-
-    f_close(&fil);
-
-    printf("Read %u bytes from SD card.\n", NumBytesRead);
-    (* input_length) = NumBytesRead;
-
-    return XST_SUCCESS;
+uint32_t read_counter_frequency(void) {
+    uint32_t val;
+    asm volatile("mrs %0, cntfrq_el0" : "=r" (val));
+    return val;
 }
 
-static inline uint64_t get_global_time() {
-    volatile uint32_t *timer_lo = (volatile uint32_t *)(XPAR_PS7_GLOBALTIMER_0_BASEADDR);
-    volatile uint32_t *timer_hi = (volatile uint32_t *)(XPAR_PS7_GLOBALTIMER_0_BASEADDR + 4);
-    uint32_t hi1, lo, hi2;
-    do {
-        hi1 = *timer_hi;
-        lo = *timer_lo;
-        hi2 = *timer_hi;
-    } while (hi1 != hi2);
-    return ((uint64_t)hi1 << 32) | lo;
+uint64_t read_counter_value(void) {
+    uint64_t val;
+    asm volatile("mrs %0, cntvct_el0" : "=r" (val));
+    return val;
+}
+
+void print_decimal(const uint8_t* data, uint32_t size) {
+    for (uint32_t i = 0; i < size; i++) {
+        printf("%u ", data[i]);
+        if ((i + 1) % 16 == 0) printf("\n");
+    }
+    printf("\n");
 }
 
 int main() {
@@ -169,31 +151,28 @@ int main() {
     int status;
     uint32_t compression_size_sw = 0;
 
-    int input_length = 0;
+    int input_length = input_txt_len;
 
-    printf("\n-------------------------------------- Test 6 --------------------------------------\n");
+    printf("\n-------------------------------------- Test 1 --------------------------------------\n");
 
-    status = ReadSD(input, &input_length);
-    if (status != XST_SUCCESS) {
-        printf("Failed to read sd card, %d\r\n", status);
-    }
+    uint32_t freq = read_counter_frequency();
 
     printf("\n-------------------------------------- SW --------------------------------------\n");
 
-    start_sw = get_global_time();
+    start_sw = read_counter_value();
 
-    lzw_compress_sw(input, output_sw, input_length, &compression_size_sw);
+    lzw_compress_sw(input_txt, output_sw, input_length, &compression_size_sw);
 
-    end_sw = get_global_time();
+    end_sw = read_counter_value();
 
     uint64_t elapsed_cycles_sw = end_sw - start_sw;
-    double elapsed_time_sw = (double)elapsed_cycles_sw / XPAR_CPU_CORE_CLOCK_FREQ_HZ;
+    double elapsed_time_sw = (double)elapsed_cycles_sw / freq;
 
     printf("SW compression time: %.6f seconds\r\n", elapsed_time_sw);
 
     printf("\n-------------------------------------- HW --------------------------------------\n");
 
-    Xil_DCacheFlushRange((UINTPTR)input, input_length);
+    Xil_DCacheFlushRange((UINTPTR)input_txt, input_length);
     Xil_DCacheFlushRange((UINTPTR)output, input_length*2);
 
     status = XLzw_compress_Initialize(&compressor, XPAR_LZW_COMPRESS_0_BASEADDR);
@@ -202,19 +181,19 @@ int main() {
         return 1;
     }
 
-    XLzw_compress_Set_input_r(&compressor, (UINTPTR)input);
+    XLzw_compress_Set_input_r(&compressor, (UINTPTR)input_txt);
     XLzw_compress_Set_output_r(&compressor, (UINTPTR)output);
     XLzw_compress_Set_input_size(&compressor, input_length);
-
-    start_hw = get_global_time();
+    
+    start_hw = read_counter_value();
 
     XLzw_compress_Start(&compressor);
     while (!XLzw_compress_IsDone(&compressor));
 
-    end_hw = get_global_time();
+    end_hw = read_counter_value();
 
     uint64_t elapsed_cycles = end_hw - start_hw;
-    double elapsed_time_sec = (double)elapsed_cycles / XPAR_CPU_CORE_CLOCK_FREQ_HZ;
+    double elapsed_time_sec = (double)elapsed_cycles / freq;
 
     printf("HW compression time: %.6f seconds\r\n", elapsed_time_sec);
 
@@ -222,7 +201,7 @@ int main() {
 
     uint32_t compression_size = XLzw_compress_Get_compression_size(&compressor);
 
-    Xil_DCacheInvalidateRange((UINTPTR)output, input_length);
+    Xil_DCacheInvalidateRange((UINTPTR)output, compression_size);
 
     if (compression_size > (uint32_t)(input_length*2)) {
         printf("Warning: compression_size (%lu) exceeds buffer size\n", (unsigned long)compression_size);
@@ -241,7 +220,7 @@ int main() {
     } else {
         printf("Outputs do not match.\n");
     }
-    
+
     if (elapsed_time_sw > elapsed_time_sec) {
         printf("Hardware was %.2f%% faster\n", 100.0 * (elapsed_time_sw - elapsed_time_sec) / elapsed_time_sw);
     } else if (elapsed_time_sw < elapsed_time_sec) {
@@ -249,6 +228,8 @@ int main() {
     } else {
         printf("Software was as fast as Hardware\n");
     }
+
+    //print_decimal(output, compression_size);
 
     return 0;
 }

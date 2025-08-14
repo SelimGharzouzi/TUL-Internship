@@ -14,6 +14,7 @@
 #define MAX_DICTIONARY_SIZE 4096
 #define INVALID_CODE 0xFFFF
 #define FILE_INPUT_SIZE 4*1024*1024
+#define COUNTER_CLK_FREQ_HZ XPAR_CPU_CORE_CLOCK_FREQ_HZ/2
 
 static uint8_t input[FILE_INPUT_SIZE];
 static uint8_t output[2 * FILE_INPUT_SIZE] = {0};
@@ -33,10 +34,6 @@ typedef struct {
 static DictionaryEntry dictionary[MAX_DICTIONARY_SIZE];
 static bool dictionary_used[MAX_DICTIONARY_SIZE];
 
-static inline uint32_t hash(uint16_t prefix, uint8_t ext) {
-    return ((prefix << 5) ^ ext) % MAX_DICTIONARY_SIZE;
-}
-
 static void init_dictionary(void){
     memset(dictionary_used, 0, sizeof(dictionary_used));
     for (uint16_t i = 0; i < 256; i++){
@@ -47,10 +44,25 @@ static void init_dictionary(void){
     }
 }
 
-static uint16_t Dictionary_find(uint16_t prefix, uint8_t ext) {
-    uint32_t h = hash(prefix, ext);
+void Dictionary_reset(uint16_t *dictionary_size, uint8_t *bit_count) {
+    (*dictionary_size) = 256;
+    (*bit_count) = 8;
+    init_dictionary();
+}
+
+uint32_t hash1(uint16_t prefix, uint8_t ext) {
+    return ((prefix << 8) ^ ext) & (MAX_DICTIONARY_SIZE - 1);
+}
+
+uint32_t hash2(uint16_t prefix, uint8_t ext) {
+    return (((prefix << 5) ^ (ext * 7)) & (MAX_DICTIONARY_SIZE - 1)) | 1;
+}
+
+uint16_t Dictionary_find(uint16_t prefix, uint8_t ext) {
+    uint32_t h1 = hash1(prefix, ext);
+    uint32_t h2 = hash2(prefix, ext);
     for (uint32_t i = 0; i < MAX_DICTIONARY_SIZE; i++) {
-        uint32_t idx = (h + i) % MAX_DICTIONARY_SIZE;
+        uint32_t idx = (h1 + i * h2) & (MAX_DICTIONARY_SIZE - 1);
         if (!dictionary_used[idx]) return INVALID_CODE;
         if (dictionary[idx].prefix_code == prefix && dictionary[idx].ext_byte == ext)
             return dictionary[idx].code;
@@ -58,19 +70,21 @@ static uint16_t Dictionary_find(uint16_t prefix, uint8_t ext) {
     return INVALID_CODE;
 }
 
-static void Dictionary_add(uint16_t prefix, uint8_t ext, uint16_t *dictionary_size, uint8_t *bit_count) {
-    if (*dictionary_size >= MAX_DICTIONARY_SIZE) return;
+void Dictionary_add(uint16_t prefix, uint8_t ext, uint16_t *dictionary_size, uint8_t *bit_count) {
+    if (*dictionary_size >= MAX_DICTIONARY_SIZE) Dictionary_reset(dictionary_size, bit_count);
     if (*dictionary_size >= (1u << *bit_count)) (*bit_count)++;
-    uint32_t h = hash(prefix, ext);
+
+    uint32_t h1 = hash1(prefix, ext);
+    uint32_t h2 = hash2(prefix, ext);
     for (uint32_t i = 0; i < MAX_DICTIONARY_SIZE; i++) {
-        uint32_t idx = (h + i) % MAX_DICTIONARY_SIZE;
+        uint32_t idx = (h1 + i * h2) & (MAX_DICTIONARY_SIZE - 1);
         if (!dictionary_used[idx]) {
             dictionary[idx].prefix_code = prefix;
             dictionary[idx].ext_byte = ext;
             dictionary[idx].code = *dictionary_size;
             dictionary_used[idx] = true;
             (*dictionary_size)++;
-            break;
+            return;
         }
     }
 }
@@ -171,7 +185,7 @@ int main() {
 
     int input_length = 0;
 
-    printf("\n-------------------------------------- Test 6 --------------------------------------\n");
+    printf("\n-------------------------------------- Test 1 --------------------------------------\n");
 
     status = ReadSD(input, &input_length);
     if (status != XST_SUCCESS) {
@@ -187,7 +201,7 @@ int main() {
     end_sw = get_global_time();
 
     uint64_t elapsed_cycles_sw = end_sw - start_sw;
-    double elapsed_time_sw = (double)elapsed_cycles_sw / XPAR_CPU_CORE_CLOCK_FREQ_HZ;
+    double elapsed_time_sw = (double)elapsed_cycles_sw / COUNTER_CLK_FREQ_HZ;
 
     printf("SW compression time: %.6f seconds\r\n", elapsed_time_sw);
 
@@ -214,7 +228,7 @@ int main() {
     end_hw = get_global_time();
 
     uint64_t elapsed_cycles = end_hw - start_hw;
-    double elapsed_time_sec = (double)elapsed_cycles / XPAR_CPU_CORE_CLOCK_FREQ_HZ;
+    double elapsed_time_sec = (double)elapsed_cycles / COUNTER_CLK_FREQ_HZ;
 
     printf("HW compression time: %.6f seconds\r\n", elapsed_time_sec);
 
@@ -222,7 +236,7 @@ int main() {
 
     uint32_t compression_size = XLzw_compress_Get_compression_size(&compressor);
 
-    Xil_DCacheInvalidateRange((UINTPTR)output, input_length);
+    Xil_DCacheInvalidateRange((UINTPTR)output, compression_size);
 
     if (compression_size > (uint32_t)(input_length*2)) {
         printf("Warning: compression_size (%lu) exceeds buffer size\n", (unsigned long)compression_size);

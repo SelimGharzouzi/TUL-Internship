@@ -1,12 +1,11 @@
 #include "functions.h"
 #include <stdio.h>
-#include <stdint.h>
 
 int main(void)
 {   
     int size = 9;
     uint8_t input[] = "ABAABAAAB";
-    uint8_t output[] = {0};
+    uint8_t output[32] = {0};
     uint32_t compression_size = 0;
 
     lzw_compress(input, output, size, &compression_size);

@@ -14,6 +14,7 @@
 
 #define NUMBERS_FUNCTIONS_PARALLEL 10
 #define FILE_INPUT_SIZE 4*1024*1024
+#define COUNTER_CLK_FREQ_HZ XPAR_CPU_CORE_CLOCK_FREQ_HZ/2
 
 static uint8_t input[FILE_INPUT_SIZE];
 uint8_t outputs[NUMBERS_FUNCTIONS_PARALLEL][2 * (FILE_INPUT_SIZE / NUMBERS_FUNCTIONS_PARALLEL)] = {{0}};
@@ -194,7 +195,7 @@ int main() {
     end = get_global_time();
 
     uint64_t elapsed_cycles = end - start;
-    double elapsed_time_sec = (double)elapsed_cycles/ XPAR_CPU_CORE_CLOCK_FREQ_HZ;
+    double elapsed_time_sec = (double)elapsed_cycles/COUNTER_CLK_FREQ_HZ;
 
     printf("Parallel compression time : %.6f seconds\r\n", elapsed_time_sec);
 

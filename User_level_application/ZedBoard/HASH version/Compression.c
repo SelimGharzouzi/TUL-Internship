@@ -236,7 +236,7 @@ int main() {
 
     uint32_t compression_size = XLzw_compress_Get_compression_size(&compressor);
 
-    Xil_DCacheInvalidateRange((UINTPTR)output, compression_size);
+    Xil_DCacheInvalidateRange((UINTPTR)output, input_length);
 
     if (compression_size > (uint32_t)(input_length*2)) {
         printf("Warning: compression_size (%lu) exceeds buffer size\n", (unsigned long)compression_size);

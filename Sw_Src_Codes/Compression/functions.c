@@ -7,6 +7,7 @@
 // -------------------------------------------------------------------------------------
 
 Dictionary dictionary[MAX_DICT_SIZE];
+bool dictionary_used[MAX_DICT_SIZE];
 uint16_t dict_size_actual = 0;
 
 uint8_t bitstream[MAX_DICT_SIZE * 12] = {0};
@@ -31,10 +32,12 @@ size_t data_len = 0;
 // -------------------------------------------------------------------------------------
 
 void Dictionary_init(void) {
+    memset(dictionary_used, 0, sizeof(dictionary_used));
     for (uint16_t i = 0; i < 256 ; i++) {
         dictionary[i].code = i;
         dictionary[i].prefix_code = INVALID_CODE;
         dictionary[i].ext_byte = (uint8_t)i;
+        dictionary_used[i] = true;
         dict_size_actual++;
     }
 }
@@ -55,13 +58,20 @@ uint16_t Dictionary_find(uint16_t prefix, uint8_t ext) {
 
 void Dictionary_add(uint16_t prefix, uint8_t ext) {
     if (dict_size_actual >= MAX_DICT_SIZE) return;
-    if(dict_size_actual >= (1u << bit_count) && bit_count< (int)log2(MAX_DICT_SIZE)) 
-        bit_count++;
-    
-    dictionary[dict_size_actual].prefix_code = prefix;
-    dictionary[dict_size_actual].ext_byte = ext;
-    dictionary[dict_size_actual].code = dict_size_actual;
-    dict_size_actual++;
+    if(dict_size_actual >= (1u << bit_count) && bit_count< (int)log2(MAX_DICT_SIZE)) bit_count++;
+
+    uint32_t h = hash(prefix, ext);
+        for (uint32_t i = 0; i < MAX_DICT_SIZE; i++) {
+        uint32_t idx = (h + i) % MAX_DICT_SIZE;
+         if (!dictionary_used[idx]) {
+            dictionary[idx].prefix_code = prefix;
+            dictionary[idx].ext_byte = ext;
+            dictionary[idx].code = dict_size_actual;
+            dictionary_used[idx] = true;
+            dict_size_actual++;
+            return;
+        }
+    }
 }
 
 void write_to_bitstream(uint16_t code) {
@@ -112,11 +122,17 @@ void print_bitstream(void) {
 
 void Dictionary_print(void) {
     printf("\nCompression Dictionary:\n");
-    for (uint16_t i = 256; i < dict_size_actual; i++) {
-        printf("Code: %u, Prefix: %u, Ext: %u\n", dictionary[i].code, dictionary[i].prefix_code,
-               dictionary[i].ext_byte);
+
+    for (uint32_t i = 0; i < MAX_DICT_SIZE; i++) {
+        if (dictionary_used[i] && dictionary[i].code >= 256) {
+            printf("Code: %u, Prefix: %u, Ext: %u\n",
+                   dictionary[i].code,
+                   dictionary[i].prefix_code,
+                   dictionary[i].ext_byte);
+        }
     }
 }
+
 
 int WriteSD(void){
     FRESULT Res;
@@ -179,3 +195,4 @@ int ReadSD(void){
 
     return XST_SUCCESS;
 }
+

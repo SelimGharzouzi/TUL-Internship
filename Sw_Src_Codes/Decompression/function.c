@@ -1,6 +1,7 @@
 #include "function.h"
 #include <stddef.h>
 #include <stdio.h>
+#include <string.h>
 #include <xil_printf.h>
 
 // -------------------------------------------------------------------------------------
@@ -35,7 +36,6 @@ size_t byte_position = 0;
 // -------------------------------------------------------------------------------------
 
 void Dictionary_init(void) {
-    dict_size_actual = 0;
     for (uint16_t i = 0; i < 256; i++) {
         dictionary[i].code = i;
         dictionary[i].sequence[0] = (uint8_t)i;
@@ -154,6 +154,9 @@ void decompress(void){
         memcpy(output + output_index, prev_sequence, prev_length);
         output_index += prev_length;
     }
+    else {
+        return;
+    }
     bit_count++;
 
 
@@ -207,6 +210,7 @@ void Dictionary_print(void) {
         printf("\n");
     }
 }
+
 
 
 

@@ -24,7 +24,7 @@ This directory contains the C/C++ source code intended for High-Level Synthesis 
 * **`ZedBoard`**
     * Contains the HLS code for **two (2) versions** of the algorithm:
         * The **Hash Version**.
-        * The **Parallel Compression** version using a **single IP Core** (where optimization is internal to the HLS block).
+        * The **Parallel Compression** version using a **single IP Core**.
 
 ### 3. `User_level_application` (Tests and Orchestration)
 
@@ -34,7 +34,7 @@ This directory holds the user-level application code used to **test, validate, a
     * Contains **a single user-level application code** for this board, used to test the single Hash Version IP Core.
 
 * **`ZedBoard`**
-    * Contains the user-level applications required to test the **three (3) performance scenarios**:
+    * Contains the user-level applications required to test the **three performance scenarios**:
         1.  Test code for the **Hash Version**.
         2.  Test code for the **Parallel Compression (Single IP)**.
         3.  Orchestration code for the **Parallel Compression using Multiple IP Cores** (where parallelism is managed by the host code, utilizing multiple IP instances).
